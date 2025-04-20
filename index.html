@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ответы к тесту</title>
+
+  <!-- =====  STYLES  ===== -->
+  <style>
+    /*  =====  ОСНОВНОЕ ОФОРМЛЕНИЕ  ===== */
+    :root {
+      --bg1: #74abe2;
+      --bg2: #5563de;
+      --glass-bg: rgba(255, 255, 255, 0.2);
+      --glass-border: rgba(255, 255, 255, 0.3);
+      --text-dark: #333;
+      --text-light: #f0f0f0;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      color: var(--text-light);
+    }
+
+    h1 {
+      margin: 1rem 0 0.5rem;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    /* ===== Панель управления (поиск + селект) ===== */
+    .controls {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    select, input[type="text"], button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 6px;
+      outline: none;
+    }
+    select, button {
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--text-dark);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    select:hover, button:hover {
+      background: rgba(255, 255, 255, 0.95);
+    }
+    input[type="text"] {
+      flex: 1 1 260px;
+      max-width: 380px;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text-dark);
+    }
+
+    /* ===== Контейнер вопросов / ответов ===== */
+    .glass {
+      width: min(90%, 900px);
+      margin: 0 auto 3rem;
+      padding: 1.5rem;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .qa-block {
+      margin-bottom: 1.2rem;
+      animation: fadeIn 0.4s ease forwards;
+      opacity: 0;
+    }
+    .qa-block h3 {
+      margin: 0;
+      cursor: pointer;
+      position: relative;
+    }
+    .qa-block h3::after {
+      content: '\25BC'; /* стрелка */
+      position: absolute;
+      right: 0;
+      top: 0;
+      transition: transform 0.2s ease;
+    }
+    .qa-block.open h3::after { transform: rotate(180deg); }
+
+    .qa-answer {
+      margin: 0.3rem 0 0 0;
+      display: none;
+      line-height: 1.35;
+      color: var(--text-light);
+    }
+    .qa-block.open .qa-answer { display: block; }
+
+    /* Подсветка совпадений поиска */
+    mark {
+      background: #fffb00;
+      color: #000;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    footer {
+      text-align: center;
+      padding: 0.7rem 0;
+      font-size: 0.9rem;
+      background: rgba(0, 0, 0, 0.25);
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ответы к тесту</h1>
+
+  <!-- ===== Панель управления ===== -->
+  <div class="controls">
+    <input id="searchInput" type="text" placeholder="Поиск вопроса…" />
+    <button id="searchBtn">Найти</button>
+
+    <select id="subjectSelect">
+      <option value="" disabled selected>Выберите предмет</option>
+    </select>
+  </div>
+
+  <!-- Контейнер для вывода вопросов / ответов -->
+  <div id="qaContainer" class="glass"></div>
+
+  <footer>© 2025 Ответы к тесту</footer>
+
+  <!-- =====  SCRIPTS  ===== -->
+  <script>
+    /* === Подгружаем answers.txt и строим справочник === */
+    const subjectSelect = document.getElementById('subjectSelect');
+    const searchInput   = document.getElementById('searchInput');
+    const searchBtn     = document.getElementById('searchBtn');
+    const qaContainer   = document.getElementById('qaContainer');
+
+    let answers = {};  // { subject: [ {question, answer}, … ] }
+
+    fetch('answers.txt')   // вместо assets/answers.txt
+      .then(r => r.text())
+      .then(parseAnswers)
+      .catch(err => console.error('Ошибка загрузки answers.txt', err));
+
+    function parseAnswers(text) {
+      const lines = text.split('\n');
+      let current = '';
+      lines.forEach(l => {
+        const line = l.trim();
+        if (!line) return;
+        if (!line.includes(' : ')) {
+          current = line;
+          answers[current] = [];
+        } else if (current) {
+          const [q, a] = line.split(' : ');
+          answers[current].push({ question: q, answer: a });
+        }
+      });
+
+      // заполняем селект
+      Object.keys(answers).forEach((subj, i) => {
+        const opt = new Option(subj, subj);
+        subjectSelect.appendChild(opt);
+        // выбираем первый предмет по умолчанию
+        if (i === 0) subjectSelect.value = subj;
+      });
+
+      showQA(); // первый вывод
+    }
+
+    // === Вывести блоки QA с учётом фильтра ===
+    function showQA() {
+      const subject = subjectSelect.value;
+      const keyword = searchInput.value.trim().toLowerCase();
+      qaContainer.innerHTML = '';
+      if (!subject || !answers[subject]) return;
+
+      // фильтрация
+      const data = keyword
+        ? answers[subject].filter(item => item.question.toLowerCase().includes(keyword))
+        : answers[subject];
+
+      if (data.length === 0) {
+        qaContainer.innerHTML = '<p>Ничего не найдено</p>';
+        return;
+      }
+
+      data.forEach(item => {
+        const block = document.createElement('div');
+        block.className = 'qa-block';
+
+        // заголовок‑вопрос
+        const h3 = document.createElement('h3');
+        h3.innerHTML = highlight(item.question, keyword);
+        block.appendChild(h3);
+
+        // ответ
+        const p = document.createElement('p');
+        p.className = 'qa-answer';
+        p.textContent = item.answer;
+        block.appendChild(p);
+
+        // клик – сворачиваем/разворачиваем
+        h3.addEventListener('click', () => block.classList.toggle('open'));
+
+        qaContainer.appendChild(block);
+      });
+    }
+
+    // === Подсветка совпадений ===
+    function highlight(text, key) {
+      if (!key) return text;
+      const re = new RegExp(`(${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return text.replace(re, '<mark>$1</mark>');
+    }
+
+    /* === События === */
+    subjectSelect.addEventListener('change', showQA);
+    searchBtn.addEventListener('click', showQA);
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') showQA(); });
+  </script>
+</body>
+</html>
